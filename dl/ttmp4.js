@@ -1,4 +1,3 @@
-
 /**
  * @author      ARR Official
  * @title       TikTok Video Downloader API (No Watermark)
@@ -11,8 +10,11 @@
 const axios = require('axios');
 const qs = require('querystring');
 
-async function getCsrfToken() {
-    const mainPage = await axios.get('https://kol.id/download-video/tiktok', {
+let cachedToken = null;
+let cookieJar = null;
+
+async function getFreshToken() {
+    const response = await axios.get('https://kol.id/download-video/tiktok', {
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -20,20 +22,31 @@ async function getCsrfToken() {
         }
     });
     
-    const tokenMatch = /name="_token"\s+value="([^"]+)"/i.exec(mainPage.data);
-    return tokenMatch ? tokenMatch[1] : null;
+    const setCookie = response.headers['set-cookie'];
+    if (setCookie) {
+        cookieJar = setCookie.map(c => c.split(';')[0]).join('; ');
+    }
+    
+    const tokenMatch = /name="_token"\s+value="([^"]+)"/i.exec(response.data);
+    if (!tokenMatch) {
+        throw new Error('Gagal mendapatkan CSRF token');
+    }
+    
+    cachedToken = tokenMatch[1];
+    return { token: cachedToken, cookie: cookieJar };
 }
 
 async function downloadTikTok(url) {
-    const csrfToken = await getCsrfToken();
-    
-    if (!csrfToken) {
-        throw new Error('Gagal mendapatkan CSRF token');
+    let tokenData;
+    try {
+        tokenData = await getFreshToken();
+    } catch (error) {
+        throw new Error('Gagal mendapatkan token: ' + error.message);
     }
     
     const formData = {
         url: url,
-        _token: csrfToken,
+        _token: tokenData.token,
         _method: 'POST'
     };
     
@@ -41,14 +54,21 @@ async function downloadTikTok(url) {
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept': 'application/json, text/html, */*',
+            'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8',
             'Referer': 'https://kol.id/download-video/tiktok',
             'Origin': 'https://kol.id',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
+            'X-Requested-With': 'XMLHttpRequest',
+            'Cookie': tokenData.cookie || ''
+        },
+        maxRedirects: 5
     });
     
-    const html = response.data.html || response.data;
+    let html = response.data;
+    
+    if (typeof response.data === 'object' && response.data.html) {
+        html = response.data.html;
+    }
     
     const downloadUrlMatch = /<a[^>]*href="([^"]+)"[^>]*>[\s\S]*?Download\s*Video<\/a>/i.exec(html);
     let videoUrl = null;
@@ -90,7 +110,7 @@ module.exports = function(app) {
             });
         }
         
-        if (!url.includes('tiktok.com') && !url.includes('vt.tiktok.com')) {
+        if (!url.includes('tiktok.com') && !url.includes('vt.tiktok.com') && !url.includes('vm.tiktok.com')) {
             return res.status(400).json({
                 status: false,
                 creator: "ARR Official",
@@ -108,6 +128,10 @@ module.exports = function(app) {
             });
         } catch (error) {
             console.error('[ERROR]', error.message);
+            if (error.response) {
+                console.error('[STATUS]', error.response.status);
+                console.error('[DATA]', error.response.data);
+            }
             res.status(500).json({
                 status: false,
                 creator: "ARR Official",
