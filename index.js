@@ -16,7 +16,7 @@ app.use(cors());
 // Untuk tambah endpoint baru: buat file baru di folder, tambahkan module.exports.meta
 // Tidak perlu edit index.js atau HTML sama sekali!
 
-const ENDPOINT_DIRS = ['ai', 'berita', 'dl', 'search']; // tambah folder baru di sini jika ada
+const ENDPOINT_DIRS = ['ai', 'berita', 'dl', 'search', 'tools']; // tambah folder baru di sini jika ada
 const registeredMeta = [];
 
 ENDPOINT_DIRS.forEach(dir => {
