@@ -1,10 +1,9 @@
-
 /**
  * @author      ARR Official
- * @title       YouTube MP3 Downloader API
- * @description Endpoint to download YouTube audio as MP3 format
- * @baseurl     https://save-tube.com
- * @tags        tools
+ * @title       SaveTube YouTube to MP3 Downloader API
+ * @description API endpoint untuk convert YouTube ke MP3 menggunakan SaveTube dengan decrypt AES
+ * @baseurl     https://media.savetube.vip
+ * @tags        tools, api, downloader
  * @language    javascript
  */
 
@@ -17,160 +16,118 @@ function decrypt(enc) {
     const b = Buffer.from(enc.replace(/\s/g, ''), 'base64');
     const iv = b.subarray(0, 16);
     const data = b.subarray(16);
-    const d = crypto.createDecipheriv('aes-128-cbc', KEY, iv);
-    return JSON.parse(Buffer.concat([d.update(data), d.final()]).toString());
+    const decipher = crypto.createDecipheriv('aes-128-cbc', KEY, iv);
+    return JSON.parse(Buffer.concat([decipher.update(data), decipher.final()]).toString());
 }
 
-async function getRandomCDN() {
-    const response = await axios.get('https://media.savetube.vip/api/random-cdn', {
+async function getRandomCdn() {
+    const res = await axios.get('https://media.savetube.vip/api/random-cdn', {
         headers: {
-            origin: 'https://save-tube.com',
-            referer: 'https://save-tube.com/'
+            'Origin': 'https://save-tube.com',
+            'Referer': 'https://save-tube.com/',
+            'User-Agent': 'Mozilla/5.0 Chrome/120.0.0.0'
         }
     });
-    return response.data.cdn;
+    return res.data.cdn;
 }
 
-async function getVideoInfo(cdn, url) {
-    const response = await axios.post(`https://${cdn}/v2/info`,
-        { url },
-        {
+async function ytmp3(url) {
+    try {
+        const cdn = await getRandomCdn();
+        
+        const infoRes = await axios.post(`https://${cdn}/v2/info`, { url }, {
             headers: {
                 'Content-Type': 'application/json',
-                origin: 'https://save-tube.com'
+                'Origin': 'https://save-tube.com',
+                'Referer': 'https://save-tube.com/'
             }
-        }
-    );
-    
-    if (!response.data?.status) {
-        throw new Error('Could not get video info');
-    }
-    
-    const json = decrypt(response.data.data);
-    return json;
-}
-
-async function getDownloadUrl(cdn, videoId, videoKey, quality) {
-    const response = await axios.post(`https://${cdn}/download`,
-        {
-            id: videoId,
-            key: videoKey,
+        });
+        
+        if (!infoRes.data?.status) throw new Error('Gagal get info video');
+        
+        const json = decrypt(infoRes.data.data);
+        
+        const audioFormat = json.audio_formats.find(f => f.quality === '128') || json.audio_formats[0];
+        
+        const downloadRes = await axios.post(`https://${cdn}/download`, {
+            id: json.id,
+            key: json.key,
             downloadType: 'audio',
-            quality: String(quality)
-        },
-        {
+            quality: String(audioFormat.quality)
+        }, {
             headers: {
                 'Content-Type': 'application/json',
-                origin: 'https://save-tube.com'
+                'Origin': 'https://save-tube.com',
+                'Referer': 'https://save-tube.com/'
             }
-        }
-    );
-    
-    if (!response.data?.data?.downloadUrl) {
-        throw new Error('Could not get download URL');
+        });
+        
+        return {
+            title: json.title,
+            duration: json.duration,
+            author: json.author,
+            quality: audioFormat.quality + 'kbps',
+            downloadUrl: downloadRes.data?.data?.downloadUrl,
+            thumbnail: json.thumbnail
+        };
+    } catch (error) {
+        console.error('Error:', error.message);
+        return null;
     }
-    
-    return response.data.data.downloadUrl;
 }
 
 module.exports = function(app) {
     app.get('/ytmp3', async (req, res) => {
+        const { url } = req.query;
+        
+        if (!url) {
+            return res.status(400).json({ 
+                status: false, 
+                message: 'Parameter URL diperlukan',
+                example: '/ytmp3?url=https://youtu.be/dQw4w9WgXcQ'
+            });
+        }
+        
+        if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+            return res.status(400).json({ 
+                status: false, 
+                message: 'URL YouTube tidak valid' 
+            });
+        }
+        
         try {
-            const url = req.query.url;
+            const result = await ytmp3(url);
             
-            if (!url) {
-                return res.status(400).json({
-                    status: 400,
-                    error: 'Parameter "url" tidak ditemukan',
-                    example: '/ytmp3?url=https://youtube.com/watch?v=xxx'
+            if (!result || !result.downloadUrl) {
+                return res.status(500).json({ 
+                    status: false, 
+                    message: 'Gagal mengconvert video' 
                 });
             }
-            
-            if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
-                return res.status(400).json({
-                    status: 400,
-                    error: 'Invalid YouTube URL'
-                });
-            }
-            
-            const cdn = await getRandomCDN();
-            
-            const videoInfo = await getVideoInfo(cdn, url);
-            
-            const audioFormat = videoInfo.audio_formats.find(f => f.quality === '128') || videoInfo.audio_formats[0];
-            
-            if (!audioFormat) {
-                throw new Error('No audio format found');
-            }
-            
-            const audioUrl = await getDownloadUrl(cdn, videoInfo.id, videoInfo.key, audioFormat.quality);
             
             res.status(200).json({
-                status: 200,
-                creator: 'ARR Official',
-                data: {
-                    title: videoInfo.title,
-                    duration: videoInfo.duration,
-                    thumbnail: videoInfo.thumbnail,
-                    quality: audioFormat.quality,
-                    size: audioFormat.size,
-                    download_url: audioUrl
-                }
+                status: true,
+                data: result
             });
-            
         } catch (error) {
-            res.status(500).json({
-                status: 500,
-                error: error.message
+            res.status(500).json({ 
+                status: false, 
+                message: 'Error: ' + error.message 
             });
         }
     });
-    
-    app.get('/ytmp3/info', async (req, res) => {
-        try {
-            const url = req.query.url;
-            
-            if (!url) {
-                return res.status(400).json({
-                    status: 400,
-                    error: 'Parameter "url" tidak ditemukan'
-                });
-            }
-            
-            if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
-                return res.status(400).json({
-                    status: 400,
-                    error: 'Invalid YouTube URL'
-                });
-            }
-            
-            const cdn = await getRandomCDN();
-            
-            const videoInfo = await getVideoInfo(cdn, url);
-            
-            const formats = videoInfo.audio_formats.map(f => ({
-                quality: f.quality,
-                size: f.size,
-                extension: f.extension
-            }));
-            
-            res.status(200).json({
-                status: 200,
-                creator: 'ARR Official',
-                data: {
-                    title: videoInfo.title,
-                    duration: videoInfo.duration,
-                    thumbnail: videoInfo.thumbnail,
-                    author: videoInfo.author,
-                    available_formats: formats
-                }
-            });
-            
-        } catch (error) {
-            res.status(500).json({
-                status: 500,
-                error: error.message
-            });
+};
+
+module.exports.meta = {
+    category: "Downloader",
+    tag: "YTMP3",
+    endpoints: [
+        {
+            method: "GET",
+            path: "/ytmp3",
+            desc: "Convert YouTube video ke MP3",
+            tryUrl: "/ytmp3?url=https://youtu.be/dQw4w9WgXcQ",
+            params: [{ name: "url", required: true, desc: "URL YouTube video" }]
         }
-    });
+    ]
 };
