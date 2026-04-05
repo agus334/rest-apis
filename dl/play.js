@@ -1,14 +1,15 @@
 /**
  * @author      ARR Official
  * @title       YouTube Search & Download API
- * @description API endpoint untuk mencari video YouTube dan download MP3 otomatis
- * @baseurl     https://yt-api.com
+ * @description API endpoint untuk mencari video YouTube dan download MP3 otomatis menggunakan yt-search
+ * @baseurl     https://media.savetube.vip
  * @tags        tools, api, downloader, search
  * @language    javascript
  */
 
 const axios = require('axios');
 const crypto = require('crypto');
+const yts = require('yt-search');
 
 const KEY = Buffer.from('C5D58EF67A7584E4A29F6C35BBC4EB12', 'hex');
 
@@ -72,27 +73,19 @@ async function ytmp3(url) {
 }
 
 async function searchYoutube(query) {
-    const response = await axios.get('https://yt-api.com/api/search', {
-        params: {
-            query: query,
-            type: 'video',
-            limit: 5
-        },
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json'
-        }
-    });
+    const result = await yts(query);
+    const videos = result.videos.slice(0, 5);
     
-    const results = response.data?.data || [];
-    
-    return results.map(item => ({
-        title: item.title,
-        videoId: item.videoId,
-        url: `https://youtube.com/watch?v=${item.videoId}`,
-        duration: item.duration,
-        thumbnail: item.thumbnail?.[0]?.url,
-        author: item.channelTitle
+    return videos.map(video => ({
+        title: video.title,
+        videoId: video.videoId,
+        url: video.url,
+        duration: video.duration,
+        timestamp: video.timestamp,
+        thumbnail: video.thumbnail,
+        author: video.author.name,
+        views: video.views,
+        ago: video.ago
     }));
 }
 
@@ -132,9 +125,12 @@ module.exports = function(app) {
                     video: {
                         title: topResult.title,
                         author: topResult.author,
-                        duration: topResult.duration,
+                        duration: topResult.timestamp,
+                        durationSeconds: topResult.duration,
                         url: topResult.url,
-                        thumbnail: topResult.thumbnail
+                        thumbnail: topResult.thumbnail,
+                        views: topResult.views,
+                        uploaded: topResult.ago
                     },
                     audio: {
                         title: audio.title,
