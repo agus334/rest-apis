@@ -1,7 +1,7 @@
 /**
  * @author      ARR Official
- * @title       YouTube Play API
- * @description Cari dan download lagu dari YouTube ke MP3
+ * @title       YouTube Play API (InnerTube)
+ * @description Cari dan download lagu dari YouTube ke MP3 pake InnerTube API
  * @baseurl     https://media.savetube.vip
  * @tags        tools, api, downloader
  * @language    javascript
@@ -9,7 +9,6 @@
 
 const axios = require('axios');
 const crypto = require('crypto');
-const yts = require('yt-search');
 
 const KEY = Buffer.from('C5D58EF67A7584E4A29F6C35BBC4EB12', 'hex');
 
@@ -73,19 +72,47 @@ async function ytmp3(url) {
 }
 
 async function searchYoutube(query) {
-    const result = await yts(query);
-    const videos = result.videos.slice(0, 3);
+    const payload = {
+        context: {
+            client: {
+                clientName: "WEB",
+                clientVersion: "2.20240101.00.00"
+            }
+        },
+        query: query
+    };
     
-    return videos.map(video => ({
-        title: video.title,
-        videoId: video.videoId,
-        url: video.url,
-        duration: video.duration,
-        timestamp: video.timestamp,
-        thumbnail: video.thumbnail,
-        author: video.author.name,
-        views: video.views
-    }));
+    const response = await axios.post("https://www.youtube.com/youtubei/v1/search", payload, {
+        headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 Chrome/120.0.0.0'
+        }
+    });
+    
+    const contents = response.data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+    const videos = [];
+    
+    for (const section of contents) {
+        const items = section?.itemSectionRenderer?.contents || [];
+        for (const item of items) {
+            const video = item?.videoRenderer;
+            if (video && video.videoId) {
+                videos.push({
+                    title: video.title?.runs?.[0]?.text || 'No title',
+                    videoId: video.videoId,
+                    url: `https://youtube.com/watch?v=${video.videoId}`,
+                    duration: video.lengthText?.simpleText || 'N/A',
+                    thumbnail: video.thumbnail?.thumbnails?.[0]?.url || '',
+                    author: video.ownerText?.runs?.[0]?.text || 'Unknown',
+                    views: video.viewCountText?.simpleText || 'N/A'
+                });
+                if (videos.length >= 3) break;
+            }
+        }
+        if (videos.length >= 3) break;
+    }
+    
+    return videos;
 }
 
 module.exports = function(app) {
@@ -125,7 +152,7 @@ module.exports = function(app) {
                     video: {
                         title: topResult.title,
                         author: topResult.author,
-                        duration: topResult.timestamp,
+                        duration: topResult.duration,
                         url: topResult.url,
                         thumbnail: topResult.thumbnail,
                         views: topResult.views
