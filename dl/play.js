@@ -1,5 +1,4 @@
-```javascript
-/**
+/*
  * @author      ARR Official
  * @title       YouTube Play API
  * @description Cari dan download lagu dari YouTube ke MP3
@@ -166,4 +165,3 @@ module.exports.meta = {
         }
     ]
 };
-```
