@@ -130,7 +130,7 @@
             <span class="section-index">05</span>
             <div><h2 class="section-title">Cara Tambah Endpoint Baru</h2></div>
           </div>
-          <p class="doc-text">Buat file baru di folder kategori, tambahkan <code>module.exports.meta</code>, dan endpoint akan otomatis muncul di UI:</p>
+          <p class="doc-text"><code></code></p>
           <div class="code-wrap copyable">
             <div class="code-topbar">
               <span class="code-lang">JAVASCRIPT</span>
@@ -139,27 +139,7 @@
                 Copy
               </button>
             </div>
-            <pre id="codeBlock">// Contoh: search/googleSearch.js
-module.exports = function(app) {
-  app.get('/googlesearch', async (req, res) => {
-    const { q } = req.query;
-    // ... logika kamu di sini
-    res.json({ status: 200, data: result });
-  });
-};
-
-// Ini yang dibaca otomatis oleh sistem!
-module.exports.meta = {
-  category: "Search & Islami",  // kategori yang sudah ada
-  tag: "SRCH",
-  endpoints: [{
-    method: "GET",
-    path: "/googlesearch",
-    desc: "Cari di Google",
-    tryUrl: "/googlesearch?q=hello",
-    params: [{ name: "q", required: true, desc: "Query pencarian" }]
-  }]
-};</pre>
+            <pre id="codeBlock"></pre>
           </div>
         </div>
       </div>
