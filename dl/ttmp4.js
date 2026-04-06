@@ -1,40 +1,87 @@
 /**
  * @author      ARR Official
- * @title       TikTok Video Downloader API (No Watermark)
- * @description API endpoint untuk download video TikTok tanpa watermark dari KOL.ID
- * @baseurl     https://kol.id
- * @tags        tools, api, downloader, tiktok
+ * @title       TikTok Downloader API Endpoint
+ * @description Endpoint untuk download video TikTok tanpa watermark
+ * @baseurl     multiple fallback APIs
+ * @tags        downloader, tiktok, api
  * @language    javascript
  */
 
-const axios = require('axios');
-const qs = require('querystring');
+const TikTokDownloader = require('./TikTokDownloader');
 
-let cachedToken = null;
-let cookieJar = null;
+module.exports = function(app) {
+    const tiktok = new TikTokDownloader();
 
-async function getFreshToken() {
-    const response = await axios.get('https://kol.id/download-video/tiktok', {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8'
+    app.get('/tiktok', async (req, res) => {
+        try {
+            const url = req.query.url || req.query.q;
+            
+            if (!url) {
+                return res.status(400).json({
+                    status: false,
+                    error: "Parameter 'url' diperlukan",
+                    example: "/tiktok?url=https://www.tiktok.com/@username/video/123456789",
+                    creator: "ARR Official"
+                });
+            }
+
+            const result = await tiktok.download(url);
+            
+            res.json({
+                status: true,
+                creator: "ARR Official",
+                ...result
+            });
+
+        } catch (error) {
+            res.status(500).json({
+                status: false,
+                error: error.message,
+                hint: "Pastikan URL TikTok valid dan tidak diblokir region",
+                creator: "ARR Official"
+            });
         }
     });
-    
-    const setCookie = response.headers['set-cookie'];
-    if (setCookie) {
-        cookieJar = setCookie.map(c => c.split(';')[0]).join('; ');
-    }
-    
-    const tokenMatch = /name="_token"\s+value="([^"]+)"/i.exec(response.data);
-    if (!tokenMatch) {
-        throw new Error('Gagal mendapatkan CSRF token');
-    }
-    
-    cachedToken = tokenMatch[1];
-    return { token: cachedToken, cookie: cookieJar };
-}
+
+    app.get('/tiktok/stream', async (req, res) => {
+        try {
+            const url = req.query.url;
+            if (!url) {
+                return res.status(400).json({ error: "Parameter 'url' diperlukan" });
+            }
+
+            const result = await tiktok.downloadWithBuffer(url);
+            
+            res.setHeader('Content-Type', result.content_type);
+            res.setHeader('Content-Disposition', `attachment; filename="${result.title}.mp4"`);
+            res.send(result.video_buffer);
+            
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+};
+
+module.exports.meta = {
+    category: "Downloader",
+    tag: "tiktok",
+    endpoints: [
+        {
+            method: "GET",
+            path: "/tiktok",
+            desc: "Download video TikTok tanpa watermark",
+            tryUrl: "/tiktok?url=https://www.tiktok.com/@username/video/123456789",
+            params: [{ name: "url", required: true, desc: "URL video TikTok" }]
+        },
+        {
+            method: "GET",
+            path: "/tiktok/stream",
+            desc: "Stream/download langsung file video TikTok",
+            tryUrl: "/tiktok/stream?url=https://www.tiktok.com/@username/video/123456789",
+            params: [{ name: "url", required: true, desc: "URL video TikTok" }]
+        }
+    ]
+};}
 
 async function downloadTikTok(url) {
     let tokenData;
