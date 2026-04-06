@@ -1,8 +1,8 @@
 /**
  * @author      ARR Official
- * @title       Claude Online AI Chat API
- * @description API endpoint untuk mengakses Claude AI melalui claude.online
- * @baseurl     https://claude.online
+ * @title       Claude AI Chat API (Alternative)
+ * @description API endpoint alternatif untuk mengakses Claude AI
+ * @baseurl     https://claude.ai
  * @tags        ai, chat, claude, api
  * @language    javascript
  */
@@ -10,7 +10,7 @@
 const axios = require('axios');
 
 module.exports = function(app) {
-    app.get('/claude', async (req, res) => {
+    app.get('/claude2', async (req, res) => {
         try {
             const prompt = req.query.q || req.query.prompt || req.query.text;
             
@@ -18,23 +18,53 @@ module.exports = function(app) {
                 return res.status(400).json({
                     status: false,
                     error: "Parameter 'q' diperlukan",
-                    example: "/claude?q=siapa Jokowi",
+                    example: "/claude2?q=siapa Jokowi",
                     creator: "ARR Official"
                 });
             }
 
-            const headers = {
-                "accept": "*/*",
-                "accept-encoding": "gzip, deflate, br, zstd",
-                "accept-language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-                "connection": "keep-alive",
-                "content-type": "application/json",
-                "origin": "https://claude.online",
-                "referer": "https://claude.online/",
-                "sec-ch-ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
-                "sec-ch-ua-mobile": "?1",
-                "sec-ch-ua-platform": '"Android"',
-                "sec-fetch-dest": "empty",
+            // Menggunakan API alternative yang lebih stabil
+            const response = await axios.post('https://api.claude.ai/v1/messages', {
+                model: "claude-3-haiku-20240307",
+                max_tokens: 1024,
+                messages: [
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ]
+            }, {
+                headers: {
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept": "application/json"
+                },
+                timeout: 30000
+            }).catch(() => {
+                // Fallback ke API gratis
+                return axios.post('https://api.itsmeow.dev/v1/chat/completions', {
+                    model: "claude-3-haiku",
+                    messages: [{ role: "user", content: prompt }]
+                }, { timeout: 30000 });
+            });
+
+            res.json({
+                status: true,
+                creator: "ARR Official",
+                pertanyaan: prompt,
+                jawaban: response.data.choices?.[0]?.message?.content || response.data.content || "Maaf, tidak bisa mendapatkan respons"
+            });
+
+        } catch (error) {
+            res.status(500).json({
+                status: false,
+                error: "Layanan Claude sedang sibuk, coba lagi nanti",
+                detail: error.message,
+                creator: "ARR Official"
+            });
+        }
+    });
+};                "sec-fetch-dest": "empty",
                 "sec-fetch-mode": "cors",
                 "sec-fetch-site": "cross-site",
                 "user-agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36"
